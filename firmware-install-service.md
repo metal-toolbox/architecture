@@ -188,7 +188,7 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     participant Serverservice
     participant Flasher
     participant Server BMC
-    participant Artifacts bucket
+    participant Artifacts
 
     %% >>>>>>>>>> interaction
     Dustin->>Serverservice: POST /api/v1/servers/{id}/condition
@@ -215,7 +215,7 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts bucket: download BMC firmware
+    Flasher->>Artifacts: download BMC firmware
     Flasher->>Flasher: verify BMC firmware checksum
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
@@ -226,7 +226,7 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     deactivate Server BMC
 
     %% >>>>>>>>>> flasher install BIOS firmware
-    Flasher->>Artifacts bucket: download BIOS firmware
+    Flasher->>Artifacts: download BIOS firmware
     Flasher->>Flasher: verify BIOS firmware checksum
     Flasher->>Server BMC: Install BIOS firmware
     activate Server BMC
@@ -265,7 +265,7 @@ TODO: this needs more eyes and testing.
     participant Condition-orchestrator
     participant Flasher
     participant Server BMC
-    participant Artifacts bucket
+    participant Artifacts
 
 
     %% >>>>>>>>>> interaction
@@ -296,7 +296,7 @@ TODO: this needs more eyes and testing.
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts bucket: download BMC firmware
+    Flasher->>Artifacts: download BMC firmware
     Flasher->>Flasher: verify BMC firmware checksum
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
@@ -327,7 +327,7 @@ TODO: this needs more eyes and testing.
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts bucket: download BMC firmware
+    Flasher->>Artifacts: download BMC firmware
     Flasher->>Flasher: verify BMC firmware checksum
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
