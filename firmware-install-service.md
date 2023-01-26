@@ -36,7 +36,7 @@ This document introduces the services part of the whole and how they interact. A
 
 ## Concepts
 
-Firmware install as a service depends on the platform and a few constructs defined on top of Serverservice to function, In an event driven and scalable manner.
+Firmware install as a service depends on the platform and a few constructs defined on top of Serverservice to function in an event driven and scalable manner.
 
 This section covers an overview of those technologies and constructs for reference.
 
@@ -46,7 +46,7 @@ This section covers an overview of those technologies and constructs for referen
 - A *condition* is represents an action to be reconciled on a server by a controller (Flasher, Alloy, PBnJ)
 - A *condition* is an object associated with a server.
 - A server may have one or more unique *conditions* associated with it, that is - it cannot have two or more `firmwareInstall` conditions associated with it at any given instant.
-- *conditions* are modelled around the k8s [`podConditions`](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)
+- *Conditions* are modelled around the k8s [`podConditions`](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)
 - The *kinds* of *conditions* that could exist depends on the controllers present.
 - Each *condition* has a 'kind' attribute which could be one of - `firmwareInstall`, `inventoryOOB`, `powerCycleHard`, `powerCycleSoft` etc.
 - The *condition* object consists of the following fields,
@@ -73,7 +73,7 @@ This section covers an overview of those technologies and constructs for referen
 - Controllers transition and keep the *condition* updated based on its work.
 - Controller send a message on the NATs message bus to update the `state`, `data` attributes.
 - Controllers should not modify the condition `kind` attribute.
-- When updating the `status` or `data` attributes, the controller must pass the original `tally` value from the previous operation where it received this value, Serverservice will not accept a `PUT` update on a Conditions if the `tally` value does not match the existing, this mechanism functions as an [optimistic lock](https://en.wikipedia.org/wiki/Optimistic_concurrency_control).
+- When updating the `status` or `data` attributes, the controller must pass the original `tally` value from the previous operation where it received this value, Serverservice will not accept a `PUT` OR a message to update a Condition if the `tally` value does not match the existing, this mechanism functions as an [optimistic lock](https://en.wikipedia.org/wiki/Optimistic_concurrency_control).
 - Controllers are to resend a message in case of a failure - in either sending the message or if the original update was rejected by Serverservice.
 - Controllers are expected to drop unrelated or duplicate messages.
 - [TODO] How does a controller reclaim, retry a *condition* after an abrupt restart/failure.
@@ -86,8 +86,7 @@ This section covers an overview of those technologies and constructs for referen
 
 #### Messaging
 
-Controllers and services communicate through the NATS pubsub system (to begin with),
-futher details are to be added once this is past the PoC phase.
+Controllers and services communicate through the NATS pubsub system (to begin with), further details are to be added once this is past the PoC phase.
 
 ##### Message schema
 
@@ -134,7 +133,7 @@ flowchart TD
 
 ### Process
 
-The diagrams below depicts the sequence of events for the Firmware install process.
+The diagrams below depict the sequence of events for the Firmware install process.
 
 #### Failure modes and recovery
 
@@ -149,7 +148,7 @@ The various kinds of failure modes we want to cover are,
 
 Flasher should be able to request for any remaining updates that are pending OR that work to be done is published periodically by the `condition-orchestrator` (level based triggers), which is then acted on.
 
-Once flasher figures out work pending, it should - allow any currently running updates to complete and proceed to install the remaining ones.
+Once flasher figures out work pending, it should - allow any currently running updates (on the BMC) to complete and proceed to install the remaining ones.
 
 Operators of the system are notified the flasher process died abruptly along with any followup information.
 
