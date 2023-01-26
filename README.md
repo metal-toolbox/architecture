@@ -1,0 +1,1 @@
+# Hollow service architecture docs
