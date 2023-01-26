@@ -36,7 +36,7 @@ This document introduces the services part of the whole and how they interact. A
 
 ## Concepts
 
-Firmware install as a service depends on the platform and a few constructs defined on top of Serverservice to function in an event driven and scalable manner.
+Firmware install as a service depends on various platform services and a few constructs defined on top of Serverservice to function in an event driven and scalable manner.
 
 This section covers an overview of those technologies and constructs for reference.
 
@@ -55,11 +55,11 @@ This section covers an overview of those technologies and constructs for referen
 {
  "kind": "firmwareInstall",
  "status": "pending", // updated by the controller
- "data": "{ arbitrary JSON by choice of the controller }", // updated by the controller
+ "data": { ... }, // updated by the controller
  "controller": "<controller generated identifier>", // set by the controller
  "created_at": timestamp,
  "updated_at": timestamp,
- "tally": int64,
+ "lock": int64,
 }
 ```
 - The status field may only contain one of the following values  `pending`, `active`, `failed`, `succeeded`.
@@ -73,16 +73,33 @@ This section covers an overview of those technologies and constructs for referen
 - Controllers transition and keep the *condition* updated based on its work.
 - Controller send a message on the NATs message bus to update the `state`, `data` attributes.
 - Controllers should not modify the condition `kind` attribute.
-- When updating the `status` or `data` attributes, the controller must pass the original `tally` value from the previous operation where it received this value, Serverservice will not accept a `PUT` OR a message to update a Condition if the `tally` value does not match the existing, this mechanism functions as an [optimistic lock](https://en.wikipedia.org/wiki/Optimistic_concurrency_control).
+- When updating the `status` or `data` attributes, the controller must pass the original `lock` value from the previous operation where it received this value, Serverservice will not accept a `PUT` OR a message to update a Condition if the `lock` value does not match the existing, this mechanism functions as an [optimistic lock](https://en.wikipedia.org/wiki/Optimistic_concurrency_control).
 - Controllers are to resend a message in case of a failure - in either sending the message or if the original update was rejected by Serverservice.
 - Controllers are expected to drop unrelated or duplicate messages.
 - [TODO] How does a controller reclaim, retry a *condition* after an abrupt restart/failure.
 
 #### Locks
 
-- Locks are a Serverservice construct to restrict the number of controllers acting on the same device at the same instant.
+> Note: this construct needs more brainstorming and review before implementation.
 
-- [TODO]
+Locks are a Serverservice construct to restrict the number of controllers acting on the same device at the same instant.
+
+They are an exclusive lock for the device BMC access (atleast for now).
+
+A controller acting to finalize a condition on a device obtains a lock - only if the condition its deals with can fail in a disruptive manner, or that condition could affect other conditions that may be currently `active` on the BMC.
+
+Examples of possibly disruptive conditions are - `firmwareInstall`, `powerCycleHost` (not exhaustive).
+
+The below cases describe situations where device locks will prove useful.
+
+case 1
+
+- If theres a two conditions `firmwareInstall`, `powerCycleHost` set on a device and they are in the `pending` status, each of them should be finalized serially (in order of timestamp or a priority value), so as not to affect each other.
+
+case 2
+
+- If the `firmwareInstall` condition is currently `active` on a device, and second condition `powerCycleHost` gets set to `pending`, this second condition should not be attempted to be finalized by its relevant controller (PBnJ?) until the `firmwareInstall` controller has released the lock.
+
 
 #### Messaging
 
@@ -224,7 +241,7 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     opt Power off device
       Flasher->>Server BMC: Power off device
     end
-    Flasher-->>Serverservice: NATs event "FirmwareInstall succeded"
+    Flasher-->>Serverservice: NATs event "FirmwareInstall succeeded"
     deactivate Flasher
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
