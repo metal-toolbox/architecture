@@ -202,7 +202,7 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     %% >>>>>>>>>> flasher work begins
     Flasher->>Flasher: Initialize firmware install task
     activate Flasher
-    opt Power on device
+    opt If powered off
       Flasher->>Server BMC: Power on device
     end
     Flasher-->>Serverservice: NATs event "FirmwareInstall status"
@@ -215,8 +215,7 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts: download BMC firmware
-    Flasher->>Flasher: verify BMC firmware checksum
+    Flasher->>Artifacts: download and verify firmware file checksums
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
     Flasher-->>Serverservice: NATs event "FirmwareInstall status"
@@ -226,19 +225,17 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     deactivate Server BMC
 
     %% >>>>>>>>>> flasher install BIOS firmware
-    Flasher->>Artifacts: download BIOS firmware
-    Flasher->>Flasher: verify BIOS firmware checksum
     Flasher->>Server BMC: Install BIOS firmware
     activate Server BMC
     Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-    Flasher->>Server BMC: Power cycle host to complete install
+    Flasher->>Server BMC: Power cycle host to complete install (set PXE UEFI shell)
     loop with exponential backoff
       Flasher->>Server BMC: Poll until firmware install is finalized
     end
     deactivate Server BMC
 
     %% >>>>>>>>>> flasher work is done
-    opt Power off device
+    opt If flasher powered this device on
       Flasher->>Server BMC: Power off device
     end
     Flasher-->>Serverservice: NATs event "FirmwareInstall succeeded"
@@ -296,8 +293,7 @@ TODO: this needs more eyes and testing.
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts: download BMC firmware
-    Flasher->>Flasher: verify BMC firmware checksum
+    Flasher->>Artifacts: download and verify firmware file checksums
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
     Flasher-->>Serverservice: NATs event "FirmwareInstall status"
@@ -327,11 +323,13 @@ TODO: this needs more eyes and testing.
     Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
     Serverservice-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts: download BMC firmware
-    Flasher->>Flasher: verify BMC firmware checksum
+    Flasher->>Artifacts: download and verify firmware file checksums
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
     Flasher-->>Serverservice: NATs event "FirmwareInstall status"
+    loop with exponential backoff
+      Flasher->>Server BMC: Poll until firmware install is finalized
+    end
 
    deactivate Flasher
    deactivate Server BMC
