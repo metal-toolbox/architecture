@@ -36,15 +36,15 @@ This document introduces the services part of the whole and how they interact. A
 
 ## Concepts
 
-Firmware install as a service depends on various platform services and a few constructs defined on top of Serverservice to function in an event driven and scalable manner.
+Firmware install as a service depends on various platform services and a few constructs managed through Serverservice Attributes to function in an event driven and scalable manner.
 
 This section covers an overview of those technologies and constructs for reference.
 
-
 #### Conditions
 
-- A *condition* is represents an action to be reconciled on a server by a controller (Flasher, Alloy, PBnJ)
-- A *condition* is an object associated with a server.
+- A *condition* is represents an action to be reconciled on a server by a controller (Flasher, Alloy, PBnJ).
+- A *condition* is an object associated with a server, stored as a serverservice Server Attribute.
+- The *condition* construct is available to controllers and end users through [conditionOrc](#condition-orchestrator---conditionorc)
 - A server may have one or more unique *conditions* associated with it, that is - it cannot have two or more `firmwareInstall` conditions associated with it at any given instant.
 - *Conditions* are modelled around the k8s [`podConditions`](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions)
 - The *kinds* of *conditions* that could exist depends on the controllers present.
@@ -54,16 +54,18 @@ This section covers an overview of those technologies and constructs for referen
 ```json
 {
  "kind": "firmwareInstall",
- "status": "pending", // updated by the controller
- "data": { ... }, // updated by the controller
+ "state": "pending", // updated by the controller
+ "parameters": { ... }, // input parameters from the client requesting the condition.
+ "status": { ... }, // status
  "controller": "<controller generated identifier>", // set by the controller
  "created_at": timestamp,
  "updated_at": timestamp,
- "lock": int64,
 }
 ```
-- The status field may only contain one of the following values  `pending`, `active`, `failed`, `succeeded`.
+- The state field may only contain one of the following values  `pending`, `active`, `failed`, `succeeded`.
 - A *condition* starts in the `pending` state and finalizes in either the `failed`, `suceeded` states.
+- The `parameters` field is an arbitrary JSON object that the condition-orchestrator accepts from the client.
+- The `status` field is an arbitrary JSON object that the condition-orchestrator updates based on controller feedback.
 
 #### Controllers
 
@@ -73,10 +75,14 @@ This section covers an overview of those technologies and constructs for referen
 - Controllers transition and keep the *condition* updated based on its work.
 - Controller send a message on the NATs message bus to update the `state`, `data` attributes.
 - Controllers should not modify the condition `kind` attribute.
-- When updating the `status` or `data` attributes, the controller must pass the original `lock` value from the previous operation where it received this value, Serverservice will not accept a `PUT` OR a message to update a Condition if the `lock` value does not match the existing, this mechanism functions as an [optimistic lock](https://en.wikipedia.org/wiki/Optimistic_concurrency_control).
+
 - Controllers are to resend a message in case of a failure - in either sending the message or if the original update was rejected by Serverservice.
 - Controllers are expected to drop unrelated or duplicate messages.
-- [TODO] How does a controller reclaim, retry a *condition* after an abrupt restart/failure.
+
+*TBD*
+
+ - How does a controller reclaim, retry a *condition* after an abrupt restart/failure.
+ - When updating the `status` or `data` attributes, the controller must pass the original `lock` value from the previous operation where it received this value, Serverservice will not accept a `PUT` OR a message to update a Condition if the `lock` value does not match the existing, this mechanism functions as an [optimistic lock](https://en.wikipedia.org/wiki/Optimistic_concurrency_control).
 
 #### Locks
 
@@ -109,10 +115,12 @@ Controllers and services communicate through the NATS pubsub system (to begin wi
 
 [TBD]
 
-#### Condition orchestrator
+####  condition orchestrator - conditionOrc
 
-The condition-orchestrator is a service that serves mainly two purposes,
+`ConditionOrc` is a service that serves four purposes,
 
+- Expose a CRUD API for server *conditions* with the *conditions* stored in Serverservice as server Attributes.
+- Keeps track of controllers active per condition, redistributes work if a controller is unavailable.
 - Lookup un-finalized *conditions* in Serverservice and publishes them with a time interval until they are finalized [level based triggers](https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d).
 - Garbage collect *conditions* in Serverservice that are found to be idle.
 
@@ -122,7 +130,7 @@ The firmware install service architecture tries to be as event driven as possibl
 
 - [Flasher](https://github.com/metal-toolbox/flasher)
 - [Serverservice](https://github.com/metal-toolbox/hollow-serverservice)
-- Condition-orchestrator
+- [ConditionOrc]()
 - [NATs](https://docs.nats.io/)
 
 ```mermaid
@@ -130,7 +138,7 @@ The firmware install service architecture tries to be as event driven as possibl
     title: service and controller interaction
 ---
 flowchart TD
-    m{{NATS message bus}}<-->c(condition-orchestrator)
+    m{{NATS message bus}}<-->c(ConditionOrc)
     m{{NATS message bus}}<-->s(serverservice)<-->d[(crdb)]
     m{{NATS message bus}}<-->f1(flasher)
     m{{NATS message bus}}<-->f2(flasher)
@@ -175,9 +183,8 @@ Operators of the system are notified the flasher process died abruptly along wit
 
 This is the sequence diagram for a successful firmware install for the BIOS, BMC components, through the server BMC.
 
-The request is received by Serverservice which then forwards requests on the NATs message bus.
+The request for a `firmwareUpdate` is received by `conditionOrc` which then registers the *condition* in Serverservice and forwards requests on the NATs message bus for the controllers.
 
-Note: The `condition-orchestrator` is not depicted in the diagram, since it does not play as much of a role in this case.
 
 ```mermaid
   sequenceDiagram;
@@ -186,18 +193,19 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
 
     %% >>>>>>>>>> participants
     participant Serverservice
+    participant ConditionOrc
     participant Flasher
     participant Server BMC
     participant Artifacts
 
     %% >>>>>>>>>> interaction
-    Dustin->>Serverservice: POST /api/v1/servers/{id}/condition
-    activate Serverservice
+    Dustin->>ConditionOrc: POST /api/v1/servers/{id}/condition
+    activate ConditionOrc
     Note right of Dustin: {"kind": "FirmwareInstall", "firmware-set-id": "<UUID>"}
-    Serverservice->>Serverservice: record server condition in DB
-    Serverservice->>Flasher: NATs event "FirmwareInstall" on server
-    Serverservice-->Dustin:  200
-    deactivate Serverservice
+    ConditionOrc->>Serverservice: add FirmwareInstall attribute
+    ConditionOrc->>Flasher: NATs event "FirmwareInstall" on server
+    ConditionOrc-->Dustin:  200
+    deactivate ConditionOrc
 
     %% >>>>>>>>>> flasher work begins
     Flasher->>Flasher: Initialize firmware install task
@@ -205,20 +213,29 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     opt If powered off
       Flasher->>Server BMC: Power on device
     end
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall status"
+    activate ConditionOrc
+      ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
     Flasher->>Serverservice: GET /api/v1/firmware-set
 
     %% >>>>>>>>>> flasher installs BMC firmware
     Flasher->>Server BMC: Query installed firmware
     Flasher->>Flasher: Plan firmware applicable from firmware-set
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-    Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
-    Serverservice-->>Dustin: {FirmwareInstall Status}
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall status"
+    activate ConditionOrc
+      ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
+    Dustin->>ConditionOrc: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
+    ConditionOrc-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
     Flasher->>Artifacts: download and verify firmware file checksums
     Flasher->>Server BMC: Install BMC firmware
     activate Server BMC
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall status"
+    activate ConditionOrc
+      ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
     loop with exponential backoff
       Flasher->>Server BMC: Poll until BMC firmware install is finalized
     end
@@ -227,7 +244,10 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     %% >>>>>>>>>> flasher install BIOS firmware
     Flasher->>Server BMC: Install BIOS firmware
     activate Server BMC
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall status"
+    activate ConditionOrc
+    ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
     Flasher->>Server BMC: Power cycle host to complete install (set PXE UEFI shell)
     loop with exponential backoff
       Flasher->>Server BMC: Poll until firmware install is finalized
@@ -238,10 +258,13 @@ Note: The `condition-orchestrator` is not depicted in the diagram, since it does
     opt If flasher powered this device on
       Flasher->>Server BMC: Power off device
     end
-    Flasher-->>Serverservice: NATs event "FirmwareInstall succeeded"
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall succeeded"
+    activate ConditionOrc
+      ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
     deactivate Flasher
-    Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
-    Serverservice-->>Dustin: {FirmwareInstall Status}
+    Dustin->>ConditionOrc: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
+    ConditionOrc-->>Dustin: {FirmwareInstall Status}
 ```
 
 
@@ -259,83 +282,57 @@ TODO: this needs more eyes and testing.
 
     %% >>>>>>>>>> participants
     participant Serverservice
-    participant Condition-orchestrator
+    participant ConditionOrc
     participant Flasher
     participant Server BMC
     participant Artifacts
 
-
     %% >>>>>>>>>> interaction
-
-    Dustin->>Serverservice: POST /api/v1/servers/{id}/condition
-    activate Serverservice
+    Dustin->>ConditionOrc: POST /api/v1/servers/{id}/condition
+    activate ConditionOrc
     Note right of Dustin: {"kind": "FirmwareInstall", "firmware-set-id": "<UUID>"}
-    Serverservice->>Serverservice: record server condition in DB
-    Serverservice->>Flasher: NATs event "FirmwareInstall" on server
-    Serverservice-->Dustin:  200
-
-
-    deactivate Serverservice
+    ConditionOrc->>Serverservice: add FirmwareInstall attribute
+    ConditionOrc->>Flasher: NATs event "FirmwareInstall" on server
+    ConditionOrc-->Dustin:  200
+    deactivate ConditionOrc
 
     %% >>>>>>>>>> flasher work begins
     Flasher->>Flasher: Initialize firmware install task
     activate Flasher
-    opt Power on device
+    opt If powered off
       Flasher->>Server BMC: Power on device
     end
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall status"
+    activate ConditionOrc
+      ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
     Flasher->>Serverservice: GET /api/v1/firmware-set
 
     %% >>>>>>>>>> flasher installs BMC firmware
     Flasher->>Server BMC: Query installed firmware
     Flasher->>Flasher: Plan firmware applicable from firmware-set
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-    Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
-    Serverservice-->>Dustin: {FirmwareInstall Status}
+    Flasher-->>ConditionOrc: NATs event "FirmwareInstall status"
+    activate ConditionOrc
+      ConditionOrc-->>Serverservice: update FirmwareInstall Attribute
+    deactivate ConditionOrc
+    Dustin->>ConditionOrc: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
+    ConditionOrc-->>Dustin: {FirmwareInstall Status}
     Flasher->>Flasher: Execute plan to install firmware
     Flasher->>Artifacts: download and verify firmware file checksums
     Flasher->>Server BMC: Install BMC firmware
-    activate Server BMC
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-
+    deactivate Flasher
+    break pod killed/died
+        Flasher->>Flasher: flasher restarted / started on another node
+    end
+    activate Flasher
+    Flasher->>ConditionOrc: NATS event "Flasher online"
+    activate ConditionOrc
+    ConditionOrc->>Serverservice: list unresolved conditions
+    ConditionOrc->>Flasher: NATS event "FirmwareInstall" on server
+    deactivate ConditionOrc
     deactivate Flasher
 
-   Flasher->>Flasher: [Abrupt flasher restart]
 
-  activate Condition-orchestrator
-   Condition-orchestrator->>Serverservice: NATs event GET conditions?status=pending,active
-   Condition-orchestrator->>Flasher: NATs event "FirmwareInstall" on server
-   activate Flasher
-   %% >>>>>>>>>>> To be tested
-       %% >>>>>>>>>> flasher work begins
-    Flasher->>Flasher: Initialize firmware install task
-    activate Flasher
-    opt Power on device
-      Flasher->>Server BMC: Power on device
-    end
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-    Flasher->>Serverservice: GET /api/v1/firmware-set
-
-    %% >>>>>>>>>> flasher installs BMC firmware
-    Flasher->>Server BMC: Query installed firmware
-    Flasher->>Flasher: Plan firmware applicable from firmware-set
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-    Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
-    Serverservice-->>Dustin: {FirmwareInstall Status}
-    Flasher->>Flasher: Execute plan to install firmware
-    Flasher->>Artifacts: download and verify firmware file checksums
-    Flasher->>Server BMC: Install BMC firmware
-    activate Server BMC
-    Flasher-->>Serverservice: NATs event "FirmwareInstall status"
-    loop with exponential backoff
-      Flasher->>Server BMC: Poll until firmware install is finalized
-    end
-
-   deactivate Flasher
-   deactivate Server BMC
-   deactivate Condition-orchestrator
-   Dustin->>Serverservice: GET /api/v1/servers/{id}/condition?kind=FirmwareInstall
-   Serverservice-->>Dustin: {FirmwareInstall Status}
 ```
 
 
@@ -345,4 +342,3 @@ TODO: this needs more eyes and testing.
 - https://hackernoon.com/level-triggering-and-reconciliation-in-kubernetes-1f17fe30333d
 - https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 - https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
-
