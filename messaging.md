@@ -203,6 +203,8 @@ Configuration:
 
 The [`Serverservice`](https://github.com/metal-toolbox/hollow-serverservice) server inventory publishes events for new `server` objects created. These events are received by the [`Condition Orchestrator`](https://github.com/metal-toolbox/conditionorc/tree/mvp) and forwarded to controllers.
 
+The subjects defined below are the defaults, they can be changed or configured differently in practice.
+
 
 | service                | role       | subject                                   |
 |------------------------|------------|-------------------------------------------|
@@ -260,17 +262,17 @@ Here we describe some of the important fields,
 Where,
 
  - `<namespace>` is set to `hollow`.
- - `<resourceType>` is set to `servers`.
- - `<resourceID>` is the identifier for the resource type..
+ - `<resourceType>` is set to `server`, it should be the singular form of the resource.
+ - `<resourceID>` is the identifier for the resource type.
 
 
 The events library parses the  *URN fields using the [urnx](https://github.com/infratographer/x/tree/main/urnx) package. A message with an invalid URN is will be dropped and logged by the service receiving it.
 
 
-2. The `EventType` is upto the producer and consumer of the event, in the `Serverservice` context, this field is set to `Create`, `Update`, `Delete`.
+2. The `EventType` set based on the producer and consumer of the event, in the `Serverservice` context, this field is set to `created`, `updated`, `deleted`.
 In the context of the Condition orchestrator and controllers this is set to a [`Condition Kind`](https://github.com/metal-toolbox/conditionorc/blob/mvp/pkg/types/types.go#L15).
 
-3. TODO describe the `ActorURN` field when its actually in use, at the moment its not.
+3. The `ActorURN` field for now should be set to the JWT subject.
 
 4. The `Source` field is set to the service name that transmitted the event.
 
