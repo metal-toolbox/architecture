@@ -297,7 +297,9 @@ checks:
 ## References
 
 #### Existing server hardware health monitoring systems
- - [Google's Hardware health monitoring system - see Chapter 7. Dealing with Failures and Repairs in Datcenter as a computer - PDF](https://www.morganclaypool.com/doi/10.2200/S00874ED3V01Y201809CAC046)
+ - Google's Hardware health monitoring system - see Chapter 7. _Dealing with Failures and Repairs_ in the book _Datacenter as a computer_
+     - https://link.springer.com/book/10.1007/978-3-031-01761-2
+     - https://pages.cs.wisc.edu/~shivaram/cs744-readings/dc-computer-v3.pdf (mirror link)
  - [Facebooks fault detection system](https://engineering.fb.com/2020/12/09/data-center-engineering/how-facebook-keeps-its-large-scale-infrastructure-hardware-up-and-running/)
  - [Hardware monitoring at CERN IT - PDF](https://indico.cern.ch/event/138424/contributions/1368452/attachments/116530/165396/HEPiX_October_2011.pdf)
 
